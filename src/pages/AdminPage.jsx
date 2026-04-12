@@ -212,7 +212,7 @@ function TabCitas() {
               {[
                 { label: 'Servicio',  value: selected.services?.name ?? '—' },
                 { label: 'Duración',  value: selected.services ? `${selected.services.duration} min` : '—' },
-                { label: 'Precio',    value: selected.services ? `$${Number(selected.services.price).toLocaleString('es-AR')}` : '—' },
+                { label: 'Precio',    value: selected.services ? `${Number(selected.services.price).toLocaleString('es-ES')} €` : '—' },
                 { label: 'Fecha',     value: format(new Date(selected.start_time), "EEEE d 'de' MMMM yyyy", { locale: es }) },
                 { label: 'Hora',      value: format(new Date(selected.start_time), 'HH:mm', { locale: es }) + ' hs' },
               ].map(({ label, value }) => (
@@ -529,7 +529,7 @@ function TabServicios() {
 
   const handleSave = async (e) => {
     e.preventDefault()
-    if (!form.name.trim() || !form.price) { toast.error('Completá nombre y precio'); return }
+    if (!form.name.trim() || !form.price) { toast.error('Completa el nombre y el precio'); return }
     setSaving(true)
     try {
       const payload = { name: form.name.trim(), duration: Number(form.duration), price: Number(form.price) }
@@ -609,12 +609,12 @@ function TabServicios() {
                   {/* Name */}
                   <div className="col-span-2 sm:col-span-5">
                     <p className="font-semibold text-gray-900 text-sm">{s.name}</p>
-                    <p className="text-xs text-gray-400 sm:hidden">{s.duration} min · ${Number(s.price).toLocaleString('es-AR')}</p>
+                    <p className="text-xs text-gray-400 sm:hidden">{s.duration} min · {Number(s.price).toLocaleString('es-ES')} €</p>
                   </div>
 
                   <p className="hidden sm:block sm:col-span-2 text-center text-sm text-gray-600">{s.duration} min</p>
                   <p className="hidden sm:block sm:col-span-2 text-center text-sm font-semibold" style={{ color: B }}>
-                    ${Number(s.price).toLocaleString('es-AR')}
+                    {Number(s.price).toLocaleString('es-ES')} €
                   </p>
 
                   {/* Toggle active */}
@@ -664,7 +664,7 @@ function TabServicios() {
             {[
               { id: 'name',     label: 'Nombre',           type: 'text',   placeholder: 'Ej: Corte de cabello' },
               { id: 'duration', label: 'Duración (min)',    type: 'number', placeholder: '30', min: 5,    step: 5 },
-              { id: 'price',    label: 'Precio ($)',        type: 'number', placeholder: '1500', min: 0 },
+              { id: 'price',    label: 'Precio (€)',        type: 'number', placeholder: '25', min: 0 },
             ].map(({ id, label, ...inputProps }) => (
               <div key={id}>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">

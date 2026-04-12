@@ -42,14 +42,14 @@ interface WebhookPayload {
 /** Formatea fecha ISO a "Lunes 14 de abril de 2025, 10:30 hs" */
 function formatDate(iso: string): string {
   const date = new Date(iso)
-  return new Intl.DateTimeFormat('es-AR', {
+  return new Intl.DateTimeFormat('es-ES', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-    timeZone: 'America/Argentina/Buenos_Aires',
+    timeZone: 'Europe/Madrid',
   }).format(date)
 }
 
@@ -133,7 +133,7 @@ function buildEmailHtml(opts: {
                     <table width="100%">
                       <tr>
                         <td style="color:#6b7280;font-size:14px;width:40%;">Precio</td>
-                        <td style="color:#1a4a42;font-size:14px;font-weight:700;">$${price.toLocaleString('es-AR')}</td>
+                        <td style="color:#1a4a42;font-size:14px;font-weight:700;">${price.toLocaleString('es-ES')} €</td>
                       </tr>
                     </table>
                   </td>

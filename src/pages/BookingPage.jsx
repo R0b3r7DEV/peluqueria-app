@@ -25,7 +25,7 @@ import {
 } from '../lib/supabase'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
-const STEPS      = ['Servicio', 'Fecha y hora', 'Tus datos']
+const STEPS      = ['Servicio', 'Fecha y hora', 'Tus datos']  // "Tus datos" is neutral ES
 const BRAND      = '#1a4a42'
 const BRAND_LIGHT = '#e8f0ef'
 const BRAND_HOVER = '#14372f'
@@ -53,7 +53,7 @@ function validateClientForm(form) {
   }
 
   if (form.email.trim() && !EMAIL_RE.test(form.email.trim())) {
-    errors.email = 'Ingresá un email válido'
+    errors.email = 'Introduce un email válido'
   }
 
   return errors
@@ -131,7 +131,7 @@ function ServiceCard({ service, onClick }) {
           {service.duration} min
         </span>
         <span className="text-sm sm:text-base font-bold" style={{ color: BRAND }}>
-          ${Number(service.price).toLocaleString('es-AR')}
+          {Number(service.price).toLocaleString('es-ES')} €
         </span>
       </div>
     </button>
@@ -466,7 +466,7 @@ export function BookingPage() {
       const stillAvailable = freshSlots.some((s) => s.label === selectedSlot.label)
 
       if (!stillAvailable) {
-        toast.error('Este horario acaba de ser reservado por otra persona. Por favor elegí otro.', { duration: 5000 })
+        toast.error('Este horario acaba de ser reservado por otra persona. Por favor elige otro.', { duration: 5000 })
         setSlots(freshSlots)
         setSelectedSlot(null)
         setStep(1)
@@ -491,7 +491,7 @@ export function BookingPage() {
     } catch (err) {
       const msg = err?.message ?? ''
       if (msg.includes('duplicate') || msg.includes('unique')) {
-        toast.error('Este horario ya no está disponible. Por favor elegí otro.')
+        toast.error('Este horario ya no está disponible. Por favor elige otro.')
         setSelectedSlot(null)
         setStep(1)
         const freshSlots = await getAvailableSlots(selectedDate, selectedService.id).catch(() => [])
@@ -549,7 +549,7 @@ export function BookingPage() {
               {step === 0 && (
                 <div>
                   <h2 className="text-sm sm:text-base font-semibold text-gray-700 mb-3 sm:mb-4">
-                    ¿Qué servicio necesitás?
+                    ¿Qué servicio necesitas?
                   </h2>
                   {servicesLoading ? (
                     <div className="space-y-3">
@@ -641,6 +641,7 @@ export function BookingPage() {
 
                   <h2 className="text-sm sm:text-base font-semibold text-gray-700 mb-3 sm:mb-4">
                     Tus datos de contacto
+
                   </h2>
 
                   <ClientForm onSubmit={handleClientSubmit} loading={submitting} />
@@ -656,8 +657,8 @@ export function BookingPage() {
         </div>
 
         <p className="text-center mt-4 text-xs text-gray-400">
-          ¿Sos administrador?{' '}
-          <a href="/login" className="underline" style={{ color: BRAND }}>Ingresá acá</a>
+          ¿Eres administrador?{' '}
+          <a href="/login" className="underline" style={{ color: BRAND }}>Accede aquí</a>
         </p>
       </div>
     </div>

@@ -99,7 +99,7 @@ export function LoginPage() {
             </svg>
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Panel de administración</h1>
-          <p className="text-sm text-gray-500 mt-1">Ingresá con tu cuenta de administrador</p>
+          <p className="text-sm text-gray-500 mt-1">Accede con tu cuenta de administrador</p>
         </div>
 
         {/* Card */}
@@ -226,7 +226,7 @@ export function LoginPage() {
         <p className="text-center mt-5 text-sm text-gray-500">
           ¿Querés un turno?{' '}
           <Link to="/" className="font-medium underline" style={{ color: BRAND }}>
-            Reservar acá
+            Reservar aquí
           </Link>
         </p>
 
