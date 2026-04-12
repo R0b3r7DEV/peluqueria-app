@@ -1,0 +1,5 @@
+[project]
+id = "wtrogjsnxijppeamayno"
+
+[functions.send-confirmation]
+verify_jwt = false   # el webhook de Supabase no manda JWT, usamos WEBHOOK_SECRET

@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900 font-sans;
+  }
+}
+
+/* react-big-calendar base styles */
+.rbc-calendar {
+  @apply font-sans;
+}
+.rbc-header {
+  @apply bg-purple-50 text-purple-700 font-semibold py-2;
+}
+.rbc-today {
+  @apply bg-purple-50;
+}
+.rbc-event {
+  @apply bg-purple-600 rounded text-sm;
+}
+.rbc-selected {
+  @apply bg-purple-700;
+}
