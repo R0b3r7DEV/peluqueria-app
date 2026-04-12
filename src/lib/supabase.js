@@ -125,12 +125,27 @@ export async function updateAppointmentStatus(id, status) {
 export async function getAvailableSlots(date, serviceId) {
   const day = typeof date === 'string' ? parseISO(date) : date
 
+  // Para calcular solapamientos solo necesitamos starts_at y ends_at.
+  // Evitamos el JOIN con services para reducir posibles fallos de PostgREST.
+  const fetchExistingAppointments = async () => {
+    const from = startOfDay(day).toISOString()
+    const to   = endOfDay(day).toISOString()
+    const { data, error } = await supabase
+      .from('appointments')
+      .select('starts_at, ends_at')
+      .gte('starts_at', from)
+      .lte('starts_at', to)
+      .neq('status', 'cancelled')
+    if (error) throw new Error(error.message)
+    return data ?? []
+  }
+
   const [hours, serviceResult, blockedDates, existingAppointments] =
     await Promise.all([
       getBusinessHours(),
       supabase.from('services').select('duration_minutes').eq('id', serviceId).single(),
       getBlockedDates(),
-      getAppointments(day),
+      fetchExistingAppointments(),
     ])
 
   const dateStr   = format(day, 'yyyy-MM-dd')
@@ -160,9 +175,7 @@ export async function getAvailableSlots(date, serviceId) {
     if (slotStart > now) {
       const overlaps = existingAppointments.some((apt) => {
         const aptStart = parseISO(apt.starts_at)
-        const aptEnd   = apt.ends_at
-          ? parseISO(apt.ends_at)
-          : addMinutes(aptStart, apt.services?.duration_minutes ?? slotSize)
+        const aptEnd   = apt.ends_at ? parseISO(apt.ends_at) : addMinutes(aptStart, slotSize)
         return slotStart < aptEnd && slotEnd > aptStart
       })
       if (!overlaps) {

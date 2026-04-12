@@ -420,7 +420,7 @@ export function BookingPage() {
         setBusinessHours(hours)
         setBlockedDates(blocked)
       } catch {
-        toast.error('No se pudo cargar la información. Verificá tu conexión e intentá de nuevo.')
+        toast.error('No se pudo cargar la información. Verifica tu conexión e inténtalo de nuevo.')
       } finally {
         setServicesLoading(false)
       }
@@ -437,7 +437,7 @@ export function BookingPage() {
       .then(setSlots)
       .catch(() => {
         setSlots([])
-        toast.error('No se pudieron cargar los horarios. Intentá de nuevo.')
+        toast.error('No se pudieron cargar los horarios. Inténtalo de nuevo.')
       })
       .finally(() => setSlotsLoading(false))
   }, [selectedDate, selectedService])
@@ -466,7 +466,7 @@ export function BookingPage() {
       const stillAvailable = freshSlots.some((s) => s.label === selectedSlot.label)
 
       if (!stillAvailable) {
-        toast.error('Este horario acaba de ser reservado por otra persona. Por favor elige otro.', { duration: 5000 })
+        toast.error('Este horario acaba de ser reservado. Por favor elige otro.', { duration: 5000 })
         setSlots(freshSlots)
         setSelectedSlot(null)
         setStep(1)
@@ -497,7 +497,7 @@ export function BookingPage() {
         const freshSlots = await getAvailableSlots(selectedDate, selectedService.id).catch(() => [])
         setSlots(freshSlots)
       } else {
-        toast.error('No se pudo reservar el turno. Verificá tu conexión e intentá de nuevo.')
+        toast.error('No se pudo reservar el turno. Verifica tu conexión e inténtalo de nuevo.')
       }
     } finally {
       setSubmitting(false)
@@ -581,7 +581,7 @@ export function BookingPage() {
                     </button>
                   </div>
 
-                  <h2 className="text-sm sm:text-base font-semibold text-gray-700 mb-3">Elegí un día</h2>
+                  <h2 className="text-sm sm:text-base font-semibold text-gray-700 mb-3">Elige un día</h2>
 
                   <MiniCalendar
                     businessHours={businessHours}
