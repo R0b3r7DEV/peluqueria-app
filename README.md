@@ -20,8 +20,8 @@ Sistema de reservas online para peluquerías y salones de belleza. Permite a los
 
 ### 🔐 Panel de administración (`/admin`)
 - **Tab Citas** — calendario semanal/diario con react-big-calendar; modal de detalle con acciones confirmar, completar y cancelar
-- **Tab Horarios** — configuración de días y horarios de apertura por día de la semana + gestión de días bloqueados (feriados, vacaciones)
-- **Tab Servicios** — ABM de servicios con nombre, duración y precio; toggle activo/inactivo
+- **Tab Horarios** — configuración de días y horarios de apertura por día de la semana + gestión de días bloqueados (festivos, vacaciones)
+- **Tab Servicios** — CRUD de servicios con nombre, duración y precio; toggle activo/inactivo
 - Sidebar con avatar, nombre del negocio y cierre de sesión
 - Actualizaciones en **tiempo real** vía Supabase Realtime
 
@@ -66,7 +66,7 @@ peluqueria-app/
 │   ├── functions/
 │   │   └── send-confirmation/    # Edge Function → Resend
 │   └── migrations/
-│       └── 001_add_cancellation_token.sql
+│       └── 001_schema.sql
 └── .env.example
 ```
 
@@ -88,7 +88,7 @@ npm install
 cp .env.example .env
 ```
 
-Editá `.env` con tus credenciales de Supabase:
+Edita `.env` con tus credenciales de Supabase:
 
 ```env
 VITE_SUPABASE_URL=https://xxxxxxxxxxxxxxxxxxxx.supabase.co
@@ -98,46 +98,47 @@ VITE_SALON_NAME=Mi Peluquería
 
 ### 3. Base de datos (Supabase)
 
-Ejecutá el siguiente SQL en el **SQL Editor** de tu proyecto Supabase:
+Ejecuta el siguiente SQL en el **SQL Editor** de tu proyecto Supabase:
 
 ```sql
 -- Servicios
 create table services (
-  id       uuid primary key default gen_random_uuid(),
-  name     text not null,
-  duration int  not null,
-  price    numeric not null,
-  active   boolean default true
+  id               uuid primary key default gen_random_uuid(),
+  name             text not null,
+  duration_minutes int  not null,
+  price            decimal(8,2),
+  active           boolean default true
 );
 
--- Horarios de atención
-create table business_hours (
-  day_of_week int  primary key,  -- 0=Dom, 1=Lun, ..., 6=Sáb
-  is_open     bool default true,
-  open        text default '09:00',
-  close       text default '18:00',
-  slot_minutes int default 30
-);
-
--- Días bloqueados
-create table blocked_dates (
-  date   date primary key,
-  reason text
-);
-
--- Turnos
+-- Citas
 create table appointments (
-  id                 uuid        primary key default gen_random_uuid(),
-  client_name        text        not null,
-  client_phone       text,
-  client_email       text,
-  service_id         uuid        references services(id),
-  start_time         timestamptz not null,
-  end_time           timestamptz,
-  status             text        default 'pending',
-  notes              text,
-  cancellation_token text        unique,
-  created_at         timestamptz default now()
+  id           uuid primary key default gen_random_uuid(),
+  service_id   uuid references services(id),
+  client_name  text not null,
+  client_phone text not null,
+  client_email text,
+  starts_at    timestamptz not null,
+  ends_at      timestamptz not null,
+  status       text default 'pending',   -- pending | confirmed | cancelled | completed
+  notes        text,
+  created_at   timestamptz default now()
+);
+
+-- Horario semanal del negocio (0=Dom, 1=Lun ... 6=Sáb)
+create table business_hours (
+  id          uuid primary key default gen_random_uuid(),
+  day_of_week int  not null unique,
+  open_time   time,
+  close_time  time,
+  is_open     boolean default true
+);
+
+-- Días bloqueados (festivos, vacaciones)
+create table blocked_dates (
+  id           uuid primary key default gen_random_uuid(),
+  blocked_date date not null unique,
+  reason       text,
+  created_at   timestamptz default now()
 );
 
 -- Habilitar Realtime
@@ -150,7 +151,7 @@ alter publication supabase_realtime add table appointments;
 npm run dev
 ```
 
-Abrí [http://localhost:5173](http://localhost:5173)
+Abre [http://localhost:5173](http://localhost:5173)
 
 ---
 
