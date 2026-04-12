@@ -59,10 +59,10 @@ export function useAppointments(range = 'week', date = null) {
 
     const { data, error: fetchError } = await supabase
       .from('appointments')
-      .select('*, services (id, name, duration, price)')
-      .gte('start_time', from)
-      .lte('start_time', to)
-      .order('start_time', { ascending: true })
+      .select('*, services (id, name, duration_minutes, price)')
+      .gte('starts_at', from)
+      .lte('starts_at', to)
+      .order('starts_at', { ascending: true })
 
     if (fetchError) {
       const msg = 'No se pudieron cargar las citas. Verificá tu conexión.'
@@ -80,11 +80,11 @@ export function useAppointments(range = 'week', date = null) {
   // ------------------------------------------------------------------
   const handleInsert = useCallback((newRow) => {
     const { from, to } = getRange(paramsRef.current.range, paramsRef.current.dateKey)
-    if (newRow.start_time >= from && newRow.start_time <= to) {
+    if (newRow.starts_at >= from && newRow.starts_at <= to) {
       setAppointments((prev) => {
         if (prev.some((a) => a.id === newRow.id)) return prev
         const next = [...prev, newRow]
-        next.sort((a, b) => a.start_time.localeCompare(b.start_time))
+        next.sort((a, b) => a.starts_at.localeCompare(b.starts_at))
         return next
       })
     }
@@ -93,7 +93,7 @@ export function useAppointments(range = 'week', date = null) {
   const handleUpdate = useCallback(async (updatedRow) => {
     const { data } = await supabase
       .from('appointments')
-      .select('*, services (id, name, duration, price)')
+      .select('*, services (id, name, duration_minutes, price)')
       .eq('id', updatedRow.id)
       .single()
 

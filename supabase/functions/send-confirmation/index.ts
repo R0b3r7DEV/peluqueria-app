@@ -20,11 +20,11 @@ interface Appointment {
   client_phone: string | null
   client_email: string | null
   service_id: string
-  start_time: string
-  end_time: string | null
+  starts_at: string
+  ends_at: string | null
   status: string
   notes: string | null
-  cancellation_token: string | null
+  cancellation_token?: string | null  // columna opcional — no en schema base
 }
 
 interface WebhookPayload {
@@ -306,7 +306,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
   // Construir email
   // ------------------------------------------------------------------
   const cancelUrl = `${appUrl}/cancel?token=${cancellationToken}`
-  const dateFormatted = formatDate(appointment.start_time)
+  const dateFormatted = formatDate(appointment.starts_at)
 
   const html = buildEmailHtml({
     clientName:    appointment.client_name,

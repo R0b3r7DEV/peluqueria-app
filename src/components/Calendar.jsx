@@ -26,10 +26,10 @@ export function Calendar({ appointments, onSelectSlot, onSelectEvent }) {
     appointments.map((apt) => ({
       id: apt.id,
       title: `${apt.client_name}${apt.services ? ` — ${apt.services.name}` : ''}`,
-      start: new Date(apt.start_time),
-      end: apt.end_time
-        ? new Date(apt.end_time)
-        : moment(apt.start_time).add(apt.services?.duration || 30, 'minutes').toDate(),
+      start: new Date(apt.starts_at),
+      end: apt.ends_at
+        ? new Date(apt.ends_at)
+        : moment(apt.starts_at).add(apt.services?.duration_minutes || 30, 'minutes').toDate(),
       resource: apt,
     })),
     [appointments]

@@ -33,7 +33,7 @@ export function ServiceSelector({ value, onChange }) {
         <option value="">Selecciona un servicio</option>
         {services.map((service) => (
           <option key={service.id} value={service.id}>
-            {service.name} — {service.duration} min — {Number(service.price).toLocaleString('es-ES')} €
+            {service.name} — {service.duration_minutes} min — {Number(service.price).toLocaleString('es-ES')} €
           </option>
         ))}
       </select>

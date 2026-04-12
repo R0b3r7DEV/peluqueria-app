@@ -94,10 +94,10 @@ function TabCitas() {
   const events = useMemo(() => appointments.map((apt) => ({
     id:       apt.id,
     title:    `${apt.client_name}${apt.services ? ` · ${apt.services.name}` : ''}`,
-    start:    new Date(apt.start_time),
-    end:      apt.end_time
-      ? new Date(apt.end_time)
-      : addMinutes(new Date(apt.start_time), apt.services?.duration ?? 30),
+    start:    new Date(apt.starts_at),
+    end:      apt.ends_at
+      ? new Date(apt.ends_at)
+      : addMinutes(new Date(apt.starts_at), apt.services?.duration_minutes ?? 30),
     resource: apt,
   })), [appointments])
 
@@ -211,10 +211,10 @@ function TabCitas() {
             <div className="rounded-xl divide-y divide-gray-100" style={{ background: BL }}>
               {[
                 { label: 'Servicio',  value: selected.services?.name ?? '—' },
-                { label: 'Duración',  value: selected.services ? `${selected.services.duration} min` : '—' },
+                { label: 'Duración',  value: selected.services ? `${selected.services.duration_minutes} min` : '—' },
                 { label: 'Precio',    value: selected.services ? `${Number(selected.services.price).toLocaleString('es-ES')} €` : '—' },
-                { label: 'Fecha',     value: format(new Date(selected.start_time), "EEEE d 'de' MMMM yyyy", { locale: es }) },
-                { label: 'Hora',      value: format(new Date(selected.start_time), 'HH:mm', { locale: es }) + ' hs' },
+                { label: 'Fecha',     value: format(new Date(selected.starts_at), "EEEE d 'de' MMMM yyyy", { locale: es }) },
+                { label: 'Hora',      value: format(new Date(selected.starts_at), 'HH:mm', { locale: es }) + ' h' },
               ].map(({ label, value }) => (
                 <div key={label} className="flex justify-between items-center px-4 py-2.5 text-sm">
                   <span className="text-gray-500">{label}</span>
@@ -287,7 +287,7 @@ function TabHorarios() {
           DAYS_ES.map((name, i) => {
             const row = data.find((r) => r.day_of_week === i)
             return row
-              ? { day_of_week: i, name, is_open: row.is_open, open: row.open, close: row.close }
+              ? { day_of_week: i, name, is_open: row.is_open, open: (row.open_time ?? '09:00:00').slice(0,5), close: (row.close_time ?? '18:00:00').slice(0,5) }
               : { day_of_week: i, name, is_open: i >= 1 && i <= 6, open: '09:00', close: '18:00' }
           })
         )
@@ -297,7 +297,7 @@ function TabHorarios() {
 
   // Load blocked_dates
   useEffect(() => {
-    supabase.from('blocked_dates').select('*').order('date').then(({ data }) => {
+    supabase.from('blocked_dates').select('*').order('blocked_date').then(({ data }) => {
       setBlocked(data ?? [])
       setLoadingBlocked(false)
     })
@@ -310,7 +310,7 @@ function TabHorarios() {
     setSavingHours(true)
     try {
       const upsertData = hours.map(({ day_of_week, is_open, open, close }) =>
-        ({ day_of_week, is_open, open, close })
+        ({ day_of_week, is_open, open_time: open, close_time: close })
       )
       const { error } = await supabase.from('business_hours').upsert(upsertData, { onConflict: 'day_of_week' })
       if (error) throw error
@@ -330,15 +330,15 @@ function TabHorarios() {
       const from = new Date(blockFrom + 'T00:00:00')
       const to   = blockTo ? new Date(blockTo + 'T00:00:00') : from
       for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
-        rows.push({ date: format(new Date(d), 'yyyy-MM-dd'), reason: blockReason || null })
+        rows.push({ blocked_date: format(new Date(d), 'yyyy-MM-dd'), reason: blockReason || null })
       }
       const { data, error } = await supabase
-        .from('blocked_dates').upsert(rows, { onConflict: 'date' }).select()
+        .from('blocked_dates').upsert(rows, { onConflict: 'blocked_date' }).select()
       if (error) throw error
       setBlocked((prev) => {
-        const map = new Map(prev.map((b) => [b.date, b]))
-        data.forEach((r) => map.set(r.date, r))
-        return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date))
+        const map = new Map(prev.map((b) => [b.blocked_date, b]))
+        data.forEach((r) => map.set(r.blocked_date, r))
+        return Array.from(map.values()).sort((a, b) => a.blocked_date.localeCompare(b.blocked_date))
       })
       setBlockFrom(''); setBlockTo(''); setBlockReason('')
       toast.success(`${rows.length} día${rows.length > 1 ? 's' : ''} bloqueado${rows.length > 1 ? 's' : ''}`)
@@ -350,9 +350,9 @@ function TabHorarios() {
   }
 
   const removeBlockedDate = async (date) => {
-    const { error } = await supabase.from('blocked_dates').delete().eq('date', date)
+    const { error } = await supabase.from('blocked_dates').delete().eq('blocked_date', date)
     if (error) { toast.error('No se pudo eliminar'); return }
-    setBlocked((prev) => prev.filter((b) => b.date !== date))
+    setBlocked((prev) => prev.filter((b) => b.blocked_date !== date))
     toast.success('Día desbloqueado')
   }
 
@@ -466,21 +466,21 @@ function TabHorarios() {
             <p className="px-6 py-8 text-sm text-gray-400 text-center">No hay días bloqueados</p>
           ) : (
             blocked.map((b) => (
-              <div key={b.date} className="flex items-center justify-between px-6 py-3 gap-4">
+              <div key={b.blocked_date} className="flex items-center justify-between px-6 py-3 gap-4">
                 <div className="flex items-center gap-3">
                   <span
                     className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold"
                     style={{ background: BL, color: B }}>
-                    {format(parseISO(b.date), 'dd')}
+                    {format(parseISO(b.blocked_date), 'dd')}
                   </span>
                   <div>
                     <p className="text-sm font-medium text-gray-800 capitalize">
-                      {format(parseISO(b.date), "EEEE d 'de' MMMM yyyy", { locale: es })}
+                      {format(parseISO(b.blocked_date), "EEEE d 'de' MMMM yyyy", { locale: es })}
                     </p>
                     {b.reason && <p className="text-xs text-gray-400">{b.reason}</p>}
                   </div>
                 </div>
-                <button onClick={() => removeBlockedDate(b.date)}
+                <button onClick={() => removeBlockedDate(b.blocked_date)}
                   className="text-red-400 hover:text-red-600 transition-colors p-1.5 rounded-lg hover:bg-red-50 shrink-0"
                   aria-label="Eliminar bloqueo">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -522,7 +522,7 @@ function TabServicios() {
 
   const openNew = () => { setForm(EMPTY_SERVICE); setEditId(null); setShowForm(true) }
   const openEdit = (s) => {
-    setForm({ name: s.name, duration: s.duration, price: s.price })
+    setForm({ name: s.name, duration: s.duration_minutes, price: s.price })
     setEditId(s.id)
     setShowForm(true)
   }
@@ -532,7 +532,7 @@ function TabServicios() {
     if (!form.name.trim() || !form.price) { toast.error('Completa el nombre y el precio'); return }
     setSaving(true)
     try {
-      const payload = { name: form.name.trim(), duration: Number(form.duration), price: Number(form.price) }
+      const payload = { name: form.name.trim(), duration_minutes: Number(form.duration), price: Number(form.price) }
       if (editId) {
         const { error } = await supabase.from('services').update(payload).eq('id', editId)
         if (error) throw error
@@ -609,10 +609,10 @@ function TabServicios() {
                   {/* Name */}
                   <div className="col-span-2 sm:col-span-5">
                     <p className="font-semibold text-gray-900 text-sm">{s.name}</p>
-                    <p className="text-xs text-gray-400 sm:hidden">{s.duration} min · {Number(s.price).toLocaleString('es-ES')} €</p>
+                    <p className="text-xs text-gray-400 sm:hidden">{s.duration_minutes} min · {Number(s.price).toLocaleString('es-ES')} €</p>
                   </div>
 
-                  <p className="hidden sm:block sm:col-span-2 text-center text-sm text-gray-600">{s.duration} min</p>
+                  <p className="hidden sm:block sm:col-span-2 text-center text-sm text-gray-600">{s.duration_minutes} min</p>
                   <p className="hidden sm:block sm:col-span-2 text-center text-sm font-semibold" style={{ color: B }}>
                     {Number(s.price).toLocaleString('es-ES')} €
                   </p>

@@ -128,7 +128,7 @@ function ServiceCard({ service, onClick }) {
           <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <circle cx="12" cy="12" r="10" /><path strokeLinecap="round" d="M12 6v6l4 2" />
           </svg>
-          {service.duration} min
+          {service.duration_minutes} min
         </span>
         <span className="text-sm sm:text-base font-bold" style={{ color: BRAND }}>
           {Number(service.price).toLocaleString('es-ES')} €
@@ -481,8 +481,8 @@ export function BookingPage() {
         client_email: clientData.email  || null,
         notes:        clientData.notes  || null,
         service_id:   selectedService.id,
-        start_time:   selectedSlot.start.toISOString(),
-        end_time:     selectedSlot.end.toISOString(),
+        starts_at: selectedSlot.start.toISOString(),
+        ends_at:   selectedSlot.end.toISOString(),
       })
 
       setBookedSlot(selectedSlot)

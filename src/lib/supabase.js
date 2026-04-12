@@ -9,7 +9,7 @@ import {
   format,
 } from 'date-fns'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseUrl    = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 if (!supabaseUrl || !supabaseAnonKey) {
@@ -18,27 +18,19 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-// ---------------------------------------------------------------------------
-// Business hours
-// ---------------------------------------------------------------------------
+// Tamaño de slot por defecto (minutos) — la tabla no tiene esta columna
+const DEFAULT_SLOT = 30
 
-/**
- * Devuelve la configuración de horarios del negocio.
- *
- * La tabla `business_hours` tiene UNA FILA POR DÍA (day_of_week 0-6).
- * Retorna:
- *   - workDays: number[]  días laborables (índices JS, 0=Dom)
- *   - schedule: Record<number, { open, close, slotMinutes }>  config por día
- *
- * Si la tabla no existe o está vacía usa defaults: lun-sáb 9-18 h, 30 min.
- */
+// ---------------------------------------------------------------------------
+// Business hours  (columnas: day_of_week, open_time, close_time, is_open)
+// ---------------------------------------------------------------------------
 export async function getBusinessHours() {
   const DEFAULTS = {
     workDays: [1, 2, 3, 4, 5, 6],
     schedule: Object.fromEntries(
       [0, 1, 2, 3, 4, 5, 6].map((d) => [
         d,
-        { open: '09:00', close: '18:00', slotMinutes: 30, isOpen: d >= 1 && d <= 6 },
+        { open: '09:00', close: '18:00', slotMinutes: DEFAULT_SLOT, isOpen: d >= 1 && d <= 6 },
       ])
     ),
   }
@@ -55,10 +47,11 @@ export async function getBusinessHours() {
     data.map((r) => [
       r.day_of_week,
       {
-        open:        r.open         ?? '09:00',
-        close:       r.close        ?? '18:00',
-        slotMinutes: r.slot_minutes ?? 30,
-        isOpen:      r.is_open      ?? false,
+        // Schema usa open_time / close_time (tipo TIME → llega como "HH:MM:SS")
+        open:        (r.open_time  ?? '09:00:00').slice(0, 5),
+        close:       (r.close_time ?? '18:00:00').slice(0, 5),
+        slotMinutes: DEFAULT_SLOT,
+        isOpen:      r.is_open ?? false,
       },
     ])
   )
@@ -67,29 +60,23 @@ export async function getBusinessHours() {
 }
 
 // ---------------------------------------------------------------------------
-// Blocked dates
+// Blocked dates  (columna: blocked_date)
 // ---------------------------------------------------------------------------
-
-/**
- * Devuelve las fechas bloqueadas como strings "YYYY-MM-DD".
- */
 export async function getBlockedDates() {
   const { data, error } = await supabase
     .from('blocked_dates')
-    .select('date')
-    .order('date', { ascending: true })
+    .select('blocked_date')
+    .order('blocked_date', { ascending: true })
 
   if (error || !data) return []
-  return data.map((row) => row.date)
+  return data.map((row) => row.blocked_date)
 }
 
 // ---------------------------------------------------------------------------
-// Appointments
+// Appointments  (columnas: starts_at, ends_at)
 // ---------------------------------------------------------------------------
 
-/**
- * Devuelve los turnos NO cancelados de un día, incluyendo datos del servicio.
- */
+/** Citas NO canceladas de un día, con datos del servicio. */
 export async function getAppointments(date) {
   const day  = typeof date === 'string' ? parseISO(date) : date
   const from = startOfDay(day).toISOString()
@@ -97,33 +84,29 @@ export async function getAppointments(date) {
 
   const { data, error } = await supabase
     .from('appointments')
-    .select('*, services (id, name, duration, price)')
-    .gte('start_time', from)
-    .lte('start_time', to)
+    .select('*, services (id, name, duration_minutes, price)')
+    .gte('starts_at', from)
+    .lte('starts_at', to)
     .neq('status', 'cancelled')
-    .order('start_time', { ascending: true })
+    .order('starts_at', { ascending: true })
 
   if (error) throw new Error(error.message)
   return data ?? []
 }
 
-/**
- * Crea un nuevo turno con status 'pending'.
- */
+/** Crea un turno con status 'pending'. */
 export async function createAppointment(appointmentData) {
   const { data, error } = await supabase
     .from('appointments')
     .insert([{ ...appointmentData, status: 'pending' }])
-    .select('*, services (id, name, duration, price)')
+    .select('*, services (id, name, duration_minutes, price)')
     .single()
 
   if (error) throw new Error(error.message)
   return data
 }
 
-/**
- * Actualiza el estado de un turno.
- */
+/** Cambia el estado de un turno. */
 export async function updateAppointmentStatus(id, status) {
   const { data, error } = await supabase
     .from('appointments')
@@ -139,22 +122,13 @@ export async function updateAppointmentStatus(id, status) {
 // ---------------------------------------------------------------------------
 // Available slots
 // ---------------------------------------------------------------------------
-
-/**
- * Calcula los huecos libres de un día para un servicio dado.
- *
- * FIX: Ahora usa `schedule[dayOfWeek]` para obtener el horario específico
- * del día (la tabla tiene una fila por día, no una sola fila global).
- *
- * Retorna array de { start: Date, end: Date, label: string }
- */
 export async function getAvailableSlots(date, serviceId) {
   const day = typeof date === 'string' ? parseISO(date) : date
 
   const [hours, serviceResult, blockedDates, existingAppointments] =
     await Promise.all([
       getBusinessHours(),
-      supabase.from('services').select('duration').eq('id', serviceId).single(),
+      supabase.from('services').select('duration_minutes').eq('id', serviceId).single(),
       getBlockedDates(),
       getAppointments(day),
     ])
@@ -162,29 +136,22 @@ export async function getAvailableSlots(date, serviceId) {
   const dateStr   = format(day, 'yyyy-MM-dd')
   const dayOfWeek = day.getDay()
 
-  // Día bloqueado o fuera de días laborables
-  if (blockedDates.includes(dateStr) || !hours.workDays.includes(dayOfWeek)) {
-    return []
-  }
+  if (blockedDates.includes(dateStr) || !hours.workDays.includes(dayOfWeek)) return []
+  if (serviceResult.error || !serviceResult.data) throw new Error('Servicio no encontrado')
 
-  if (serviceResult.error || !serviceResult.data) {
-    throw new Error('Servicio no encontrado')
-  }
-
-  // Horario específico del día (open/close pueden diferir por día)
-  const dayConfig = hours.schedule[dayOfWeek] ?? { open: '09:00', close: '18:00', slotMinutes: 30 }
-  const [openH,  openM]  = dayConfig.open.split(':').map(Number)
+  const dayConfig       = hours.schedule[dayOfWeek] ?? { open: '09:00', close: '18:00', slotMinutes: DEFAULT_SLOT }
+  const [openH,  openM] = dayConfig.open.split(':').map(Number)
   const [closeH, closeM] = dayConfig.close.split(':').map(Number)
 
-  const serviceDuration = serviceResult.data.duration
+  const serviceDuration = serviceResult.data.duration_minutes
   const slotSize        = dayConfig.slotMinutes
 
-  const dayStart = setMinutes(setHours(day, openH),  openM)
+  const dayStart = setMinutes(setHours(day, openH), openM)
   const dayEnd   = setMinutes(setHours(day, closeH), closeM)
   const now      = new Date()
 
-  const slots  = []
-  let cursor   = dayStart
+  const slots = []
+  let cursor  = dayStart
 
   while (addMinutes(cursor, serviceDuration) <= dayEnd) {
     const slotStart = cursor
@@ -192,13 +159,12 @@ export async function getAvailableSlots(date, serviceId) {
 
     if (slotStart > now) {
       const overlaps = existingAppointments.some((apt) => {
-        const aptStart = parseISO(apt.start_time)
-        const aptEnd   = apt.end_time
-          ? parseISO(apt.end_time)
-          : addMinutes(aptStart, apt.services?.duration ?? slotSize)
+        const aptStart = parseISO(apt.starts_at)
+        const aptEnd   = apt.ends_at
+          ? parseISO(apt.ends_at)
+          : addMinutes(aptStart, apt.services?.duration_minutes ?? slotSize)
         return slotStart < aptEnd && slotEnd > aptStart
       })
-
       if (!overlaps) {
         slots.push({ start: slotStart, end: slotEnd, label: format(slotStart, 'HH:mm') })
       }

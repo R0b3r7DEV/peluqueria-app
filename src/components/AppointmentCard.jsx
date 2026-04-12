@@ -16,8 +16,8 @@ const STATUS_LABELS = {
 }
 
 export function AppointmentCard({ appointment, onConfirm, onCancel, isAdmin }) {
-  const { client_name, client_phone, start_time, services, status, notes } = appointment
-  const date = new Date(start_time)
+  const { client_name, client_phone, starts_at, services, status, notes } = appointment
+  const date = new Date(starts_at)
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition-shadow">
@@ -36,11 +36,11 @@ export function AppointmentCard({ appointment, onConfirm, onCancel, isAdmin }) {
       <div className="mt-3 space-y-1 text-sm text-gray-600">
         <p>
           <span className="font-medium">Fecha:</span>{' '}
-          {format(date, "EEEE d 'de' MMMM, HH:mm 'hs'", { locale: es })}
+          {format(date, "EEEE d 'de' MMMM, HH:mm", { locale: es })}
         </p>
         {services && (
           <p>
-            <span className="font-medium">Servicio:</span> {services.name} ({services.duration} min)
+            <span className="font-medium">Servicio:</span> {services.name} ({services.duration_minutes} min)
           </p>
         )}
         {notes && (
