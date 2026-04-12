@@ -5,7 +5,6 @@ import {
   setHours,
   setMinutes,
   addMinutes,
-  isWithinInterval,
   parseISO,
   format,
 } from 'date-fns'
@@ -25,34 +24,46 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 /**
  * Devuelve la configuración de horarios del negocio.
- * Si existe la tabla `business_hours` en Supabase la usa;
- * si no, retorna los valores por defecto hardcodeados.
  *
- * @returns {Promise<{ open: string, close: string, slotMinutes: number, workDays: number[] }>}
- *   open/close en formato "HH:mm", workDays = índices JS (0=Dom, 1=Lun, …)
+ * La tabla `business_hours` tiene UNA FILA POR DÍA (day_of_week 0-6).
+ * Retorna:
+ *   - workDays: number[]  días laborables (índices JS, 0=Dom)
+ *   - schedule: Record<number, { open, close, slotMinutes }>  config por día
+ *
+ * Si la tabla no existe o está vacía usa defaults: lun-sáb 9-18 h, 30 min.
  */
 export async function getBusinessHours() {
+  const DEFAULTS = {
+    workDays: [1, 2, 3, 4, 5, 6],
+    schedule: Object.fromEntries(
+      [0, 1, 2, 3, 4, 5, 6].map((d) => [
+        d,
+        { open: '09:00', close: '18:00', slotMinutes: 30, isOpen: d >= 1 && d <= 6 },
+      ])
+    ),
+  }
+
   const { data, error } = await supabase
     .from('business_hours')
     .select('*')
-    .single()
+    .order('day_of_week')
 
-  if (error || !data) {
-    // Valores por defecto: lunes a sábado, 9-18 h, turnos de 30 min
-    return {
-      open: '09:00',
-      close: '18:00',
-      slotMinutes: 30,
-      workDays: [1, 2, 3, 4, 5, 6],
-    }
-  }
+  if (error || !data || data.length === 0) return DEFAULTS
 
-  return {
-    open: data.open,
-    close: data.close,
-    slotMinutes: data.slot_minutes ?? 30,
-    workDays: data.work_days ?? [1, 2, 3, 4, 5, 6],
-  }
+  const workDays = data.filter((r) => r.is_open).map((r) => r.day_of_week)
+  const schedule = Object.fromEntries(
+    data.map((r) => [
+      r.day_of_week,
+      {
+        open:        r.open         ?? '09:00',
+        close:       r.close        ?? '18:00',
+        slotMinutes: r.slot_minutes ?? 30,
+        isOpen:      r.is_open      ?? false,
+      },
+    ])
+  )
+
+  return { workDays, schedule }
 }
 
 // ---------------------------------------------------------------------------
@@ -60,10 +71,7 @@ export async function getBusinessHours() {
 // ---------------------------------------------------------------------------
 
 /**
- * Devuelve las fechas bloqueadas (feriados, vacaciones, etc.).
- * Cada elemento es un string "YYYY-MM-DD".
- *
- * @returns {Promise<string[]>}
+ * Devuelve las fechas bloqueadas como strings "YYYY-MM-DD".
  */
 export async function getBlockedDates() {
   const { data, error } = await supabase
@@ -80,42 +88,33 @@ export async function getBlockedDates() {
 // ---------------------------------------------------------------------------
 
 /**
- * Devuelve todos los turnos de un día dado, incluyendo datos del servicio.
- *
- * @param {Date|string} date
- * @returns {Promise<Array>}
+ * Devuelve los turnos NO cancelados de un día, incluyendo datos del servicio.
  */
 export async function getAppointments(date) {
-  const day = typeof date === 'string' ? parseISO(date) : date
+  const day  = typeof date === 'string' ? parseISO(date) : date
   const from = startOfDay(day).toISOString()
-  const to = endOfDay(day).toISOString()
+  const to   = endOfDay(day).toISOString()
 
   const { data, error } = await supabase
     .from('appointments')
-    .select(`
-      *,
-      services (id, name, duration, price)
-    `)
+    .select('*, services (id, name, duration, price)')
     .gte('start_time', from)
     .lte('start_time', to)
     .neq('status', 'cancelled')
     .order('start_time', { ascending: true })
 
   if (error) throw new Error(error.message)
-  return data
+  return data ?? []
 }
 
 /**
- * Crea un nuevo turno.
- *
- * @param {{ client_name: string, client_phone?: string, service_id: string, start_time: string, notes?: string }} appointmentData
- * @returns {Promise<Object>} El turno creado
+ * Crea un nuevo turno con status 'pending'.
  */
 export async function createAppointment(appointmentData) {
   const { data, error } = await supabase
     .from('appointments')
     .insert([{ ...appointmentData, status: 'pending' }])
-    .select(`*, services (id, name, duration, price)`)
+    .select('*, services (id, name, duration, price)')
     .single()
 
   if (error) throw new Error(error.message)
@@ -124,10 +123,6 @@ export async function createAppointment(appointmentData) {
 
 /**
  * Actualiza el estado de un turno.
- *
- * @param {string} id  UUID del turno
- * @param {'pending'|'confirmed'|'cancelled'|'completed'} status
- * @returns {Promise<Object>} El turno actualizado
  */
 export async function updateAppointmentStatus(id, status) {
   const { data, error } = await supabase
@@ -148,21 +143,14 @@ export async function updateAppointmentStatus(id, status) {
 /**
  * Calcula los huecos libres de un día para un servicio dado.
  *
- * Algoritmo:
- *  1. Obtiene horarios del negocio y duración del servicio.
- *  2. Genera todos los slots posibles del día (de `open` a `close - duration`).
- *  3. Descarta slots que se solapan con turnos ya reservados.
- *  4. Descarta slots en el pasado.
- *  5. Retorna array de objetos { start: Date, end: Date, label: string }.
+ * FIX: Ahora usa `schedule[dayOfWeek]` para obtener el horario específico
+ * del día (la tabla tiene una fila por día, no una sola fila global).
  *
- * @param {Date|string} date
- * @param {string} serviceId  UUID del servicio
- * @returns {Promise<Array<{ start: Date, end: Date, label: string }>>}
+ * Retorna array de { start: Date, end: Date, label: string }
  */
 export async function getAvailableSlots(date, serviceId) {
   const day = typeof date === 'string' ? parseISO(date) : date
 
-  // 1. Configuracion del negocio + duración del servicio (en paralelo)
   const [hours, serviceResult, blockedDates, existingAppointments] =
     await Promise.all([
       getBusinessHours(),
@@ -171,13 +159,11 @@ export async function getAvailableSlots(date, serviceId) {
       getAppointments(day),
     ])
 
-  // Dia bloqueado o fuera de días laborables
-  const dateStr = format(day, 'yyyy-MM-dd')
+  const dateStr   = format(day, 'yyyy-MM-dd')
   const dayOfWeek = day.getDay()
-  if (
-    blockedDates.includes(dateStr) ||
-    !hours.workDays.includes(dayOfWeek)
-  ) {
+
+  // Día bloqueado o fuera de días laborables
+  if (blockedDates.includes(dateStr) || !hours.workDays.includes(dayOfWeek)) {
     return []
   }
 
@@ -185,42 +171,36 @@ export async function getAvailableSlots(date, serviceId) {
     throw new Error('Servicio no encontrado')
   }
 
-  const serviceDuration = serviceResult.data.duration // minutos
-  const slotSize = hours.slotMinutes
+  // Horario específico del día (open/close pueden diferir por día)
+  const dayConfig = hours.schedule[dayOfWeek] ?? { open: '09:00', close: '18:00', slotMinutes: 30 }
+  const [openH,  openM]  = dayConfig.open.split(':').map(Number)
+  const [closeH, closeM] = dayConfig.close.split(':').map(Number)
 
-  // 2. Generar todos los slots del día
-  const [openH, openM] = hours.open.split(':').map(Number)
-  const [closeH, closeM] = hours.close.split(':').map(Number)
+  const serviceDuration = serviceResult.data.duration
+  const slotSize        = dayConfig.slotMinutes
 
-  const dayStart = setMinutes(setHours(day, openH), openM)
-  const dayEnd = setMinutes(setHours(day, closeH), closeM)
-  const now = new Date()
+  const dayStart = setMinutes(setHours(day, openH),  openM)
+  const dayEnd   = setMinutes(setHours(day, closeH), closeM)
+  const now      = new Date()
 
-  const slots = []
-  let cursor = dayStart
+  const slots  = []
+  let cursor   = dayStart
 
   while (addMinutes(cursor, serviceDuration) <= dayEnd) {
     const slotStart = cursor
-    const slotEnd = addMinutes(cursor, serviceDuration)
+    const slotEnd   = addMinutes(cursor, serviceDuration)
 
-    // 4. Descartar pasados
     if (slotStart > now) {
-      // 3. Verificar solapamiento con turnos existentes
       const overlaps = existingAppointments.some((apt) => {
         const aptStart = parseISO(apt.start_time)
-        const aptEnd = apt.end_time
+        const aptEnd   = apt.end_time
           ? parseISO(apt.end_time)
           : addMinutes(aptStart, apt.services?.duration ?? slotSize)
-
         return slotStart < aptEnd && slotEnd > aptStart
       })
 
       if (!overlaps) {
-        slots.push({
-          start: slotStart,
-          end: slotEnd,
-          label: format(slotStart, 'HH:mm'),
-        })
+        slots.push({ start: slotStart, end: slotEnd, label: format(slotStart, 'HH:mm') })
       }
     }
 

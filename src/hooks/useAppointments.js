@@ -1,46 +1,47 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import {
-  startOfWeek,
-  endOfWeek,
-  startOfDay,
-  endOfDay,
-  parseISO,
-} from 'date-fns'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { startOfWeek, endOfWeek, startOfDay, endOfDay, format } from 'date-fns'
+import toast from 'react-hot-toast'
 import { supabase } from '../lib/supabase'
 
 /**
  * Carga y sincroniza en tiempo real las citas de un rango de fechas.
  *
- * @param {'day'|'week'} range - Rango inicial a cargar al montar. Default: 'week'
- * @param {Date}         date  - Fecha de referencia. Default: hoy
+ * FIX — date stability: el parámetro `date` se convierte a string "yyyy-MM-dd"
+ * para la comparación en useEffect. Así, pasar `new Date()` como default NO
+ * crea un nuevo objeto en cada render y el canal Realtime no se re-crea en loop.
  *
- * @returns {{
- *   appointments: Array,
- *   loading: boolean,
- *   error: string|null,
- *   refetch: () => Promise<void>
- * }}
+ * @param {'day'|'week'} range
+ * @param {Date|null}    date   — fecha de referencia; null = hoy
  */
-export function useAppointments(range = 'week', date = new Date()) {
+export function useAppointments(range = 'week', date = null) {
   const [appointments, setAppointments] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [loading, setLoading]           = useState(true)
+  const [error, setError]               = useState(null)
 
-  // Guardar los últimos parámetros para que refetch siempre use los actuales
-  const paramsRef = useRef({ range, date })
-  useEffect(() => { paramsRef.current = { range, date } }, [range, date])
+  // Estabilizar la fecha: convertir a string para usar como dep de useEffect.
+  // Así, incluso si el llamador pasa `new Date()` cada render, el efecto solo
+  // se re-ejecuta cuando cambia el DÍA real, no la referencia del objeto.
+  const dateKey = useMemo(
+    () => format(date ?? new Date(), 'yyyy-MM-dd'),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [date ? format(date, 'yyyy-MM-dd') : null]
+  )
+
+  // Ref con los parámetros actuales para que fetchAppointments y los handlers
+  // de Realtime siempre vean los valores más recientes sin re-crearse.
+  const paramsRef = useRef({ range, dateKey })
+  useEffect(() => {
+    paramsRef.current = { range, dateKey }
+  }, [range, dateKey])
 
   // ------------------------------------------------------------------
-  // Rango de fechas a consultar
+  // Rango de fechas
   // ------------------------------------------------------------------
-  const getRange = useCallback((r, d) => {
+  const getRange = useCallback((r, dk) => {
+    const d = new Date(dk + 'T12:00:00') // mediodía para evitar off-by-one de TZ
     if (r === 'day') {
-      return {
-        from: startOfDay(d).toISOString(),
-        to:   endOfDay(d).toISOString(),
-      }
+      return { from: startOfDay(d).toISOString(), to: endOfDay(d).toISOString() }
     }
-    // 'week' — semana comenzando el lunes
     return {
       from: startOfWeek(d, { weekStartsOn: 1 }).toISOString(),
       to:   endOfWeek(d,   { weekStartsOn: 1 }).toISOString(),
@@ -48,26 +49,25 @@ export function useAppointments(range = 'week', date = new Date()) {
   }, [])
 
   // ------------------------------------------------------------------
-  // Fetch inicial (y refetch manual)
+  // Fetch
   // ------------------------------------------------------------------
   const fetchAppointments = useCallback(async () => {
     setLoading(true)
     setError(null)
 
-    const { from, to } = getRange(paramsRef.current.range, paramsRef.current.date)
+    const { from, to } = getRange(paramsRef.current.range, paramsRef.current.dateKey)
 
     const { data, error: fetchError } = await supabase
       .from('appointments')
-      .select(`
-        *,
-        services (id, name, duration, price)
-      `)
+      .select('*, services (id, name, duration, price)')
       .gte('start_time', from)
       .lte('start_time', to)
       .order('start_time', { ascending: true })
 
     if (fetchError) {
-      setError(fetchError.message)
+      const msg = 'No se pudieron cargar las citas. Verificá tu conexión.'
+      setError(msg)
+      toast.error(msg)
     } else {
       setAppointments(data ?? [])
     }
@@ -76,23 +76,13 @@ export function useAppointments(range = 'week', date = new Date()) {
   }, [getRange])
 
   // ------------------------------------------------------------------
-  // Handlers de Realtime
+  // Handlers Realtime
   // ------------------------------------------------------------------
-
-  /**
-   * INSERT: agrega la cita solo si cae dentro del rango actualmente cargado.
-   * Evita mostrar citas de otros días/semanas.
-   */
   const handleInsert = useCallback((newRow) => {
-    const { from, to } = getRange(paramsRef.current.range, paramsRef.current.date)
-    const startTime = newRow.start_time
-
-    if (startTime >= from && startTime <= to) {
+    const { from, to } = getRange(paramsRef.current.range, paramsRef.current.dateKey)
+    if (newRow.start_time >= from && newRow.start_time <= to) {
       setAppointments((prev) => {
-        // Deduplicar por si el INSERT ya vino del optimistic update
-        const exists = prev.some((a) => a.id === newRow.id)
-        if (exists) return prev
-        // Insertar en orden cronológico
+        if (prev.some((a) => a.id === newRow.id)) return prev
         const next = [...prev, newRow]
         next.sort((a, b) => a.start_time.localeCompare(b.start_time))
         return next
@@ -100,83 +90,54 @@ export function useAppointments(range = 'week', date = new Date()) {
     }
   }, [getRange])
 
-  /**
-   * UPDATE: reemplaza el registro en el estado local.
-   * Payload.new tiene los campos de la fila pero SIN joins,
-   * así que hacemos un fetch selectivo solo de esa fila para
-   * conservar el objeto `services` anidado.
-   */
   const handleUpdate = useCallback(async (updatedRow) => {
     const { data } = await supabase
       .from('appointments')
-      .select(`*, services (id, name, duration, price)`)
+      .select('*, services (id, name, duration, price)')
       .eq('id', updatedRow.id)
       .single()
 
-    if (!data) return
-
-    setAppointments((prev) =>
-      prev.map((a) => (a.id === data.id ? data : a))
-    )
+    if (data) {
+      setAppointments((prev) => prev.map((a) => (a.id === data.id ? data : a)))
+    }
   }, [])
 
-  /**
-   * DELETE: elimina la cita del estado local.
-   */
   const handleDelete = useCallback((oldRow) => {
     setAppointments((prev) => prev.filter((a) => a.id !== oldRow.id))
   }, [])
 
   // ------------------------------------------------------------------
-  // useEffect: carga inicial + suscripción Realtime + cleanup
+  // useEffect: carga + suscripción Realtime + cleanup
   // ------------------------------------------------------------------
   useEffect(() => {
     fetchAppointments()
 
-    // Canal único por instancia del hook
-    const channelName = `appointments-realtime-${Date.now()}`
+    const channelName = `appointments-rt-${range}-${dateKey}`
 
     const channel = supabase
       .channel(channelName)
-      .on(
-        'postgres_changes',
-        {
-          event:  'INSERT',
-          schema: 'public',
-          table:  'appointments',
-        },
-        (payload) => handleInsert(payload.new)
-      )
-      .on(
-        'postgres_changes',
-        {
-          event:  'UPDATE',
-          schema: 'public',
-          table:  'appointments',
-        },
-        (payload) => handleUpdate(payload.new)
-      )
-      .on(
-        'postgres_changes',
-        {
-          event:  'DELETE',
-          schema: 'public',
-          table:  'appointments',
-        },
-        (payload) => handleDelete(payload.old)
-      )
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'appointments' },
+        (p) => handleInsert(p.new))
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'appointments' },
+        (p) => handleUpdate(p.new))
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'appointments' },
+        (p) => handleDelete(p.old))
       .subscribe((status) => {
         if (status === 'CHANNEL_ERROR') {
-          setError('Error en la conexión en tiempo real')
+          const msg = 'Se perdió la conexión en tiempo real. Recargá la página si las citas no se actualizan.'
+          setError(msg)
+          toast.error(msg, { duration: 6000 })
+        }
+        if (status === 'TIMED_OUT') {
+          toast.error('Tiempo de espera agotado. Reintentando conexión...', { duration: 4000 })
         }
       })
 
-    // Cleanup: desuscribir al desmontar o cuando cambian range/date
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [range, date, fetchAppointments, handleInsert, handleUpdate, handleDelete])
+    return () => { supabase.removeChannel(channel) }
 
-  // ------------------------------------------------------------------
+  // dateKey (string) es estable — solo cambia cuando cambia el DÍA real.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range, dateKey])
+
   return { appointments, loading, error, refetch: fetchAppointments }
 }
