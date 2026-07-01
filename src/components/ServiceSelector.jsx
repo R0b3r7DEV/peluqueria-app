@@ -7,7 +7,16 @@ export function ServiceSelector({ value, onChange }) {
 
   useEffect(() => {
     const fetchServices = async () => {
-      const { data } = await supabase.from('services').select('*').order('name')
+      const { data, error } = await supabase
+        .from('services')
+        .select('*')
+        .eq('active', true)
+        .order('name')
+      if (error) {
+        // No silenciar el error: sin esto, un fallo de RLS o de conexión
+        // dejaba el desplegable vacío sin ninguna pista de por qué.
+        console.error('Error al cargar los servicios:', error.message)
+      }
       setServices(data || [])
       setLoading(false)
     }
