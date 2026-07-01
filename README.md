@@ -1,197 +1,114 @@
+# Salon Booking App
 
-# ✂️ Peluquería App
+> Online appointment booking for hair salons and beauty studios: clients book in a few steps,
+> and the owner manages appointments, opening hours and services in real time.
 
-Sistema de reservas online para peluquerías y salones de belleza. Permite a los clientes reservar turnos en pocos pasos y a los administradores gestionar citas, horarios y servicios en tiempo real.
+<p>
+  <img alt="React" src="https://img.shields.io/badge/React_19-20232A?style=flat&logo=react&logoColor=61DAFB" />
+  <img alt="Vite" src="https://img.shields.io/badge/Vite_8-646CFF?style=flat&logo=vite&logoColor=white" />
+  <img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind_3-38BDF8?style=flat&logo=tailwindcss&logoColor=white" />
+  <img alt="Supabase" src="https://img.shields.io/badge/Supabase-3ECF8E?style=flat&logo=supabase&logoColor=white" />
+  <img alt="License MIT" src="https://img.shields.io/badge/License-MIT-blue?style=flat" />
+</p>
 
-![Stack](https://img.shields.io/badge/React-18-61dafb?style=flat-square&logo=react)
-![Vite](https://img.shields.io/badge/Vite-6-646cff?style=flat-square&logo=vite)
-![Tailwind](https://img.shields.io/badge/Tailwind-3-38bdf8?style=flat-square&logo=tailwindcss)
-![Supabase](https://img.shields.io/badge/Supabase-realtime-3ecf8e?style=flat-square&logo=supabase)
+<!-- TODO: screenshot — booking flow and admin calendar -->
 
----
-
-## Funcionalidades
-
-### 👤 Portal del cliente (`/`)
-- Flujo de reserva en **3 pasos**: selección de servicio → fecha y hora → datos de contacto
-- Calendario mensual que respeta horarios de apertura y días bloqueados
-- Slots de horario calculados dinámicamente según duración del servicio y citas existentes
-- Email de confirmación automático con enlace para cancelar
-
-### 🔐 Panel de administración (`/admin`)
-- **Tab Citas** — calendario semanal/diario con react-big-calendar; modal de detalle con acciones confirmar, completar y cancelar
-- **Tab Horarios** — configuración de días y horarios de apertura por día de la semana + gestión de días bloqueados (festivos, vacaciones)
-- **Tab Servicios** — CRUD de servicios con nombre, duración y precio; toggle activo/inactivo
-- Sidebar con avatar, nombre del negocio y cierre de sesión
-- Actualizaciones en **tiempo real** vía Supabase Realtime
+*🇪🇸 A Spanish version of this document is available on request.*
 
 ---
 
-## Stack
+## Features
 
-| Capa | Tecnología |
+### Client portal (`/`)
+- **3-step booking flow**: pick a service → date and time → contact details.
+- Monthly calendar that respects opening hours and blocked days.
+- Time slots computed dynamically from service duration and existing appointments.
+- Automatic confirmation email with a cancellation link.
+
+### Admin panel (`/admin`)
+- **Appointments tab** — weekly/daily calendar (react-big-calendar) with a detail modal to confirm,
+  complete or cancel.
+- **Hours tab** — per-weekday opening hours + blocked days (holidays, vacations).
+- **Services tab** — CRUD for services (name, duration, price) with active/inactive toggle.
+- **Real-time updates** via Supabase Realtime (`postgres_changes`).
+
+---
+
+## Tech stack
+
+| Layer | Technology |
 |---|---|
-| Frontend | React 18 + Vite |
-| Estilos | Tailwind CSS 3 |
+| Frontend | React 19 + Vite |
+| Styling | Tailwind CSS 3 |
 | Backend / DB | Supabase (PostgreSQL) |
-| Autenticación | Supabase Auth |
-| Tiempo real | Supabase Realtime (postgres_changes) |
-| Calendario | react-big-calendar + moment |
-| Email | Resend (Edge Function) |
-| Routing | React Router DOM v6 |
-| Notificaciones | react-hot-toast |
+| Auth | Supabase Auth |
+| Real-time | Supabase Realtime |
+| Calendar | react-big-calendar + moment |
+| Email | Resend (Supabase Edge Function) |
+| Routing | React Router DOM v7 |
+| Notifications | react-hot-toast |
 
 ---
 
-## Estructura del proyecto
+## Project structure
 
 ```
-peluqueria-app/
-├── src/
-│   ├── pages/
-│   │   ├── BookingPage.jsx       # Reserva pública (3 pasos)
-│   │   ├── AdminPage.jsx         # Panel admin (tabs + sidebar)
-│   │   └── LoginPage.jsx         # Login con Supabase Auth
-│   ├── components/
-│   │   ├── ProtectedRoute.jsx    # Guard de autenticación
-│   │   ├── AppointmentCard.jsx   # Tarjeta de cita
-│   │   ├── BookingForm.jsx       # Formulario de reserva
-│   │   ├── Calendar.jsx          # Wrapper de BigCalendar
-│   │   └── ServiceSelector.jsx   # Dropdown de servicios
-│   ├── hooks/
-│   │   └── useAppointments.js    # Estado + Realtime suscripción
-│   └── lib/
-│       └── supabase.js           # Cliente + helpers (slots, horarios, etc.)
-├── supabase/
-│   ├── functions/
-│   │   └── send-confirmation/    # Edge Function → Resend
-│   └── migrations/
-│       └── 001_schema.sql
-└── .env.example
+src/
+├── pages/
+│   ├── BookingPage.jsx     # public booking (3 steps)
+│   ├── AdminPage.jsx       # admin panel (tabs + sidebar)
+│   └── LoginPage.jsx       # Supabase Auth login
+├── components/
+│   ├── ProtectedRoute.jsx  # auth guard
+│   ├── AppointmentCard.jsx
+│   ├── BookingForm.jsx
+│   ├── Calendar.jsx        # BigCalendar wrapper
+│   └── ServiceSelector.jsx
+├── hooks/useAppointments.js  # state + Realtime subscription
+└── lib/supabase.js           # client + helpers (slots, hours, ...)
+supabase/
+├── functions/send-confirmation/  # Edge Function → Resend
+└── migrations/                   # database schema
 ```
 
 ---
 
-## Instalación
-
-### 1. Clonar el repositorio
+## Getting started
 
 ```bash
 git clone https://github.com/R0b3r7DEV/peluqueria-app.git
 cd peluqueria-app
 npm install
+cp .env.example .env      # set VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_SALON_NAME
+npm run dev               # http://localhost:5173
 ```
 
-### 2. Variables de entorno
+**Database:** apply the SQL in `supabase/migrations/` from the Supabase SQL Editor (it creates the
+`services`, `appointments`, `business_hours` and `blocked_dates` tables and enables Realtime on
+`appointments`).
+
+**Confirmation emails (optional):** deploy the `send-confirmation` Edge Function and wire a Database
+Webhook on `appointments` INSERT — see the function's `.env.example` for the required secrets
+(`RESEND_API_KEY`, `FROM_EMAIL`, `WEBHOOK_SECRET`, ...).
 
 ```bash
-cp .env.example .env
-```
-
-Edita `.env` con tus credenciales de Supabase:
-
-```env
-VITE_SUPABASE_URL=https://xxxxxxxxxxxxxxxxxxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=tu_anon_key
-VITE_SALON_NAME=Mi Peluquería
-```
-
-### 3. Base de datos (Supabase)
-
-Ejecuta el siguiente SQL en el **SQL Editor** de tu proyecto Supabase:
-
-```sql
--- Servicios
-create table services (
-  id               uuid primary key default gen_random_uuid(),
-  name             text not null,
-  duration_minutes int  not null,
-  price            decimal(8,2),
-  active           boolean default true
-);
-
--- Citas
-create table appointments (
-  id           uuid primary key default gen_random_uuid(),
-  service_id   uuid references services(id),
-  client_name  text not null,
-  client_phone text not null,
-  client_email text,
-  starts_at    timestamptz not null,
-  ends_at      timestamptz not null,
-  status       text default 'pending',   -- pending | confirmed | cancelled | completed
-  notes        text,
-  created_at   timestamptz default now()
-);
-
--- Horario semanal del negocio (0=Dom, 1=Lun ... 6=Sáb)
-create table business_hours (
-  id          uuid primary key default gen_random_uuid(),
-  day_of_week int  not null unique,
-  open_time   time,
-  close_time  time,
-  is_open     boolean default true
-);
-
--- Días bloqueados (festivos, vacaciones)
-create table blocked_dates (
-  id           uuid primary key default gen_random_uuid(),
-  blocked_date date not null unique,
-  reason       text,
-  created_at   timestamptz default now()
-);
-
--- Habilitar Realtime
-alter publication supabase_realtime add table appointments;
-```
-
-### 4. Levantar el servidor de desarrollo
-
-```bash
-npm run dev
-```
-
-Abre [http://localhost:5173](http://localhost:5173)
-
----
-
-## Deploy de la Edge Function (emails)
-
-```bash
-# Instalar Supabase CLI
-npm install -g supabase
-supabase login
-
-# Setear variables de entorno
-supabase secrets set --project-ref <project-ref> \
-  RESEND_API_KEY=re_xxxx \
-  FROM_EMAIL=turnos@tuperluqueria.com \
-  SALON_NAME="Mi Peluquería" \
-  SALON_ADDRESS="Tu dirección" \
-  APP_URL=https://tuperluqueria.com \
-  WEBHOOK_SECRET=un-secreto-seguro
-
-# Deploy
-supabase functions deploy send-confirmation --project-ref <project-ref>
-```
-
-Luego crear el **Database Webhook** en Supabase Dashboard:
-- Tabla: `appointments` — Evento: `INSERT`
-- URL: `https://<project-ref>.supabase.co/functions/v1/send-confirmation`
-- Header: `x-webhook-secret: <WEBHOOK_SECRET>`
-
----
-
-## Scripts
-
-```bash
-npm run dev      # Servidor de desarrollo
-npm run build    # Build de producción
-npm run preview  # Preview del build
+npm run build     # production build
+npm run preview   # preview the build
 ```
 
 ---
 
-## Licencia
+## What I learned building this
+
+- Modeling a **real business domain** (services, opening hours, blocked days) and computing valid
+  time slots on top of it.
+- Using **Supabase Realtime** so the admin calendar reflects new bookings instantly.
+- Building a clean **role split**: a public booking flow and an authenticated admin area behind a
+  route guard.
+- Wiring **event-driven emails** with a serverless Edge Function triggered by a database webhook.
+
+---
+
+## License
 
 MIT © [R0b3r7DEV](https://github.com/R0b3r7DEV)
